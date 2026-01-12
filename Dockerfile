@@ -4,25 +4,24 @@ FROM twingate/connector:latest AS twingate-source
 # --- Stage 2: Build the Actual Runner ---
 FROM debian:bookworm-slim
 
-# 1. Install Python and Supervisor (Standard way)
+# Install Python and Supervisor
 RUN apt-get update && apt-get install -y \
     python3 \
     supervisor \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Copy the Twingate connector binaries from the official image
-# Twingate stores its binaries in /usr/bin/
-COPY --from=twingate-source /usr/bin/twingate-connector* /usr/bin/
+# COPY THE CORRECT BINARY: 
+# Twingate stores the main binary as /connectord in their image
+COPY --from=twingate-source /connectord /usr/bin/connectord
 
-# 3. Setup Supervisor config
+# Copy Supervisor config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# 4. Set Environment Variables
+# Set Twingate Envs (Must be provided in Koyeb Dashboard)
 ENV TWINGATE_NETWORK=""
 ENV TWINGATE_ACCESS_TOKEN=""
 ENV TWINGATE_REFRESH_TOKEN=""
 
-# 5. Launch using Supervisor
-# We use the shell form here because Debian actually has a shell!
+# Launch using Supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
