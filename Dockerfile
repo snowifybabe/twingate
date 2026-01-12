@@ -25,3 +25,5 @@ ENV TWINGATE_REFRESH_TOKEN=""
 
 # Launch using Supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
+EXPOSE 8000
