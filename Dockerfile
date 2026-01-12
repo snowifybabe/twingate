@@ -1,11 +1,12 @@
 # Use the official Twingate Connector as the base image
 FROM twingate/connector:1
 
-# Install python3 to run the dummy health server
-RUN apt-get update && apt-get install -y python3 && rm -rf /var/lib/apt/lists/*
+# Stage 1: Build the health server binary or script
+FROM python:3.11-slim as builder
 
-# Create a dummy health server script
+# Create a simple Python health server
 RUN echo 'from http.server import BaseHTTPRequestHandler, HTTPServer \n\
+import os, subprocess \n\
 class HealthHandler(BaseHTTPRequestHandler): \n\
     def do_GET(self): \n\
         if self.path == "/health": \n\
@@ -16,20 +17,27 @@ class HealthHandler(BaseHTTPRequestHandler): \n\
             self.send_response(404) \n\
             self.end_headers() \n\
 def run(): \n\
-    print("Starting health server on port 8080...") \n\
+    # Start the connector as a subprocess to keep it in the same container \n\
+    subprocess.Popen(["/usr/bin/connectorctl", "run"]) \n\
     HTTPServer(("0.0.0.0", 8080), HealthHandler).serve_forever() \n\
 if __name__ == "__main__": \n\
-    run()' > /health_server.py
+    run()' > /app/health_server.py
 
-# Create a startup script to run both processes
-RUN echo '#!/bin/bash \n\
-python3 /health_server.py & \n\
-# Execute the original Twingate entrypoint \n\
-exec /usr/bin/connectorctl run' > /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Stage 2: Final Twingate Image
+FROM twingate/connector:1
 
-# Expose the health check port
+# Copy Python and the script from the builder stage
+# (This works because the connector image is a minimal Linux environment)
+COPY --from=builder /usr/local/bin/python3 /usr/local/bin/python3
+COPY --from=builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
+COPY --from=builder /lib/x86_64-linux-gnu /lib/x86_64-linux-gnu
+COPY --from=builder /app/health_server.py /health_server.py
+
+
+
+# Run the health server (which now manages the connector process)
 EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/python3", "/health_server.py"]
 
 
 
