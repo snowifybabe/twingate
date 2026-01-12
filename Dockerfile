@@ -1,28 +1,28 @@
-# --- Stage 1: Builder ---
-FROM debian:bookworm-slim AS builder
+# --- Stage 1: Get the Twingate Binary ---
+FROM twingate/connector:latest AS twingate-source
+
+# --- Stage 2: Build the Actual Runner ---
+FROM debian:bookworm-slim
+
+# 1. Install Python and Supervisor (Standard way)
 RUN apt-get update && apt-get install -y \
-    python3-minimal \
+    python3 \
     supervisor \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Stage 2: Final Image ---
-FROM twingate/connector:latest
+# 2. Copy the Twingate connector binaries from the official image
+# Twingate stores its binaries in /usr/bin/
+COPY --from=twingate-source /usr/bin/twingate-connector* /usr/bin/
 
-# Copy python and supervisor from the builder
-COPY --from=builder /usr/bin/python3* /usr/bin/
-COPY --from=builder /usr/lib/python3* /usr/lib/
-COPY --from=builder /usr/bin/supervisord /usr/bin/supervisord
-COPY --from=builder /usr/bin/supervisorctl /usr/bin/supervisorctl
-COPY --from=builder /etc/supervisor /etc/supervisor
-
-# Copy your config (make sure supervisord.conf is in your local folder)
+# 3. Setup Supervisor config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Twingate credentials (to be passed at runtime)
+# 4. Set Environment Variables
 ENV TWINGATE_NETWORK=""
 ENV TWINGATE_ACCESS_TOKEN=""
 ENV TWINGATE_REFRESH_TOKEN=""
 
-# Start Supervisor
-# Since there is no shell, we must use the "exec" form (JSON array)
-ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# 5. Launch using Supervisor
+# We use the shell form here because Debian actually has a shell!
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
